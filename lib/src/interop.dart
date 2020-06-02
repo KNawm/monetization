@@ -16,4 +16,4 @@ external void log(dynamic str, [dynamic str2]);
 
 bool get supportsMonetization => hasProperty(document, 'monetization');
 
-dynamic get(value, property) => getProperty(value, property);
+dynamic get(dynamic value, dynamic property) => getProperty(value, property);
