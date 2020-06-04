@@ -1,6 +1,6 @@
 import 'dart:html'
     show CustomEvent, EventStreamProvider, EventTarget, MetaElement, document;
-import 'dart:math' as math show pow;
+import 'dart:math' as math show pow, Random;
 import 'interop.dart' as js;
 
 class Monetization {
@@ -30,11 +30,27 @@ class Monetization {
     if (js.supportsMonetization) {
       _setPaymentPointer(paymentPointer);
       _monetization = js.monetization;
-      _total = 0;
-      _addEventHandlers();
       _addMetaTag();
+      _addEventHandlers();
     }
   }
+
+  factory Monetization.probabilistic(Map<String, double> paymentPointers, {debug = false}) {
+    final sum = paymentPointers.values.reduce((sum, weight) => sum + weight);
+    var choice = math.Random().nextDouble() * sum;
+    String paymentPointer;
+
+    for (final pointer in paymentPointers.keys) {
+      final weight = paymentPointers[pointer];
+      if ((choice -= weight) <= 0) {
+        paymentPointer = pointer;
+      }
+    }
+
+    return Monetization(paymentPointer, debug: debug);
+  }
+
+  bool get isMonetized => state != 'undefined';
 
   void enable() {
     _addMetaTag();
@@ -44,7 +60,7 @@ class Monetization {
     _removeMetaTag();
   }
 
-  double total({bool formatted}) {
+  double getTotal({bool formatted}) {
     if (formatted) {
       return double.parse(
           (_total * math.pow(10, -_assetScale)).toStringAsFixed(_assetScale));
@@ -62,7 +78,9 @@ class Monetization {
     }
   }
 
-  MetaElement _getMetaTag() => document.head.querySelector('meta[name="monetization"]');
+  MetaElement _getMetaTag() {
+    return document.head.querySelector('meta[name="monetization"]');
+  }
 
   void _addMetaTag() {
     if (_getMetaTag() == null) {
@@ -70,6 +88,7 @@ class Monetization {
       metaTag.name = 'monetization';
       metaTag.content = _paymentPointer;
       document.head.append(metaTag);
+      _total = 0;
     }
   }
 
@@ -78,6 +97,7 @@ class Monetization {
 
     if (metaTag != null) {
       metaTag.setAttribute('content', paymentPointer);
+      _total = 0;
     }
   }
 
@@ -165,7 +185,8 @@ class Monetization {
         js.log('%c${map.toString()}', 'color: yellow');
       } else if (map['type'] == 'monetizationstart') {
         js.log('%c${map.toString()}', 'color: lime');
-      } else { // monetizationstop
+      } else {
+        // monetizationstop
         js.log('%c${map.toString()}', 'color: red');
       }
     }
