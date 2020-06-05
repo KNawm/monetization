@@ -10,31 +10,81 @@ class Monetization {
   int _assetScale;
   String _state;
   double _total;
+  /// Whether to log events to the console.
   bool debug;
 
   Stream<CustomEvent> _onPending;
   Stream<CustomEvent> _onStart;
   Stream<CustomEvent> _onStop;
   Stream<CustomEvent> _onProgress;
+  /// Stream that tracks 'monetizationpending' events.
+  ///
+  /// This event fires when Web Monetization is enabled.
   Stream<Map> onPending;
+  /// Stream that tracks 'monetizationstart' events.
+  ///
+  /// This event fires when Web Monetization has started actively paying.
   Stream<Map> onStart;
+  /// Stream that tracks 'monetizationstop' events.
+  ///
+  /// This event fires when Web Monetization has stopped.
   Stream<Map> onStop;
+  /// Stream that tracks 'monetizationprogress' events.
+  ///
+  /// This event fires when Web Monetization has streamed a payment.
   Stream<Map> onProgress;
 
+  /// Returns the current payment pointer.
   String get pointer => _paymentPointer;
+  /// Returns the code identifying the asset's unit.
+  /// For example: 'USD' or 'XRP'.
   String get assetCode => _assetCode;
+  /// Returns the number of places past the decimal for the amount.
+  /// For example, if you have USD with an [assetScale] of 2, then the minimum
+  /// divisible unit is cents.
   int get assetScale => _assetScale;
+  /// ## 'undefined'
+  /// Monetization is not supported for this user.
+  ///
+  /// ## 'pending'
+  /// Streaming has been initiated, yet first non zero packet is
+  /// "pending". It will normally transition from this `state` to `started`,
+  /// yet not always.
+  ///
+  /// ## 'started'
+  /// Streaming has received a non zero packet and is still active.
+  ///
+  /// ## 'stopped'
+  /// Streaming is inactive. This could mean a variety of things:
+  /// - May not have started yet
+  /// - May be paused (potentially will be resumed)
+  /// - Has finished completely (and awaits another request)
+  /// - The payment request was denied by user intervention
   String get state => _state ?? 'undefined';
 
+  /// Initialize Web Monetization supplying a [paymentPointer].
   Monetization(String paymentPointer, {this.debug = false}) {
     if (js.supportsMonetization) {
       _setPaymentPointer(paymentPointer);
       _monetization = js.monetization;
+      _state = js.state;
       _addMetaTag();
       _addEventHandlers();
     }
   }
 
+  /// Initialize Web Monetization supplying a Map of payment pointers with their
+  /// respective weights.
+  ///
+  /// For example:
+  /// ```
+  /// var pointers = { 'pay.tomasarias.me/usd': 0.5,
+  ///                  'pay.tomasarias.me/xrp': 0.2,
+  ///                  'pay.tomasarias.me/ars': 0.3 };
+  /// ```
+  ///
+  /// For more information,
+  /// see <https://coil.com/p/sharafian/Probabilistic-Revenue-Sharing/8aQDSPsw>
   factory Monetization.probabilistic(Map<String, double> paymentPointers, {debug = false}) {
     final sum = paymentPointers.values.reduce((sum, weight) => sum + weight);
     var choice = math.Random().nextDouble() * sum;
@@ -50,16 +100,23 @@ class Monetization {
     return Monetization(paymentPointer, debug: debug);
   }
 
+  /// Whether a user supports Web Monetization.
   bool get isMonetized => state != 'undefined';
 
+  /// Whether a user is streaming payments.
+  bool get isPaying => state == 'started';
+
+  /// Enable Web Monetization.
   void enable() {
     _addMetaTag();
   }
 
+  /// Disable Web Monetization.
   void disable() {
     _removeMetaTag();
   }
 
+  /// Returns the amount received by the current [pointer] on this session.
   double getTotal({bool formatted}) {
     if (formatted) {
       return double.parse(
@@ -92,14 +149,15 @@ class Monetization {
     }
   }
 
-  void _updateMetaTag(String paymentPointer) {
+  // Not used yet.
+  /*void _updateMetaTag(String paymentPointer) {
     final metaTag = _getMetaTag();
 
     if (metaTag != null) {
       metaTag.setAttribute('content', paymentPointer);
       _total = 0;
     }
-  }
+  }*/
 
   void _removeMetaTag() {
     final metaTag = _getMetaTag();
