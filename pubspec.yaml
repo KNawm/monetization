@@ -1,6 +1,6 @@
 name: monetization
-description: A wrapper around the Web Monetization API.
-version: 1.0.0
+description: A wrapper around the Web Monetization API to monetize content.
+version: 1.0.1
 homepage: https://github.com/KNawm/monetization
 repository: https://github.com/KNawm/monetization
 

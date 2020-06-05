@@ -10,6 +10,7 @@ class Monetization {
   int _assetScale;
   String _state;
   double _total;
+
   /// Whether to log events to the console.
   bool debug;
 
@@ -17,18 +18,22 @@ class Monetization {
   Stream<CustomEvent> _onStart;
   Stream<CustomEvent> _onStop;
   Stream<CustomEvent> _onProgress;
+
   /// Stream that tracks 'monetizationpending' events.
   ///
   /// This event fires when Web Monetization is enabled.
   Stream<Map> onPending;
+
   /// Stream that tracks 'monetizationstart' events.
   ///
   /// This event fires when Web Monetization has started actively paying.
   Stream<Map> onStart;
+
   /// Stream that tracks 'monetizationstop' events.
   ///
   /// This event fires when Web Monetization has stopped.
   Stream<Map> onStop;
+
   /// Stream that tracks 'monetizationprogress' events.
   ///
   /// This event fires when Web Monetization has streamed a payment.
@@ -36,13 +41,16 @@ class Monetization {
 
   /// Returns the current payment pointer.
   String get pointer => _paymentPointer;
+
   /// Returns the code identifying the asset's unit.
   /// For example: 'USD' or 'XRP'.
   String get assetCode => _assetCode;
+
   /// Returns the number of places past the decimal for the amount.
   /// For example, if you have USD with an [assetScale] of 2, then the minimum
   /// divisible unit is cents.
   int get assetScale => _assetScale;
+
   /// ## 'undefined'
   /// Monetization is not supported for this user.
   ///
@@ -85,7 +93,8 @@ class Monetization {
   ///
   /// For more information,
   /// see <https://coil.com/p/sharafian/Probabilistic-Revenue-Sharing/8aQDSPsw>
-  factory Monetization.probabilistic(Map<String, double> paymentPointers, {debug = false}) {
+  factory Monetization.probabilistic(Map<String, double> paymentPointers,
+      {debug = false}) {
     final sum = paymentPointers.values.reduce((sum, weight) => sum + weight);
     var choice = math.Random().nextDouble() * sum;
     String paymentPointer;
