@@ -17,6 +17,10 @@
 
 Offer extra content and features for users who stream micro-payments — including premium features, additional content, or digital goods.
 
+<h3 align="center">
+  <a href="https://pub.dev/documentation/monetization/latest/monetization/Monetization-class.html">API Reference</a>
+</h3>
+
 ## Usage
 
 A simple usage example that initializes the monetization to a specific payment pointer:
