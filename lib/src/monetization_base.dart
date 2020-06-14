@@ -1,23 +1,82 @@
+import 'dart:convert' show base64Encode, jsonEncode, jsonDecode, utf8;
 import 'dart:html'
     show CustomEvent, EventStreamProvider, EventTarget, MetaElement, document;
 import 'dart:math' as math show pow, Random;
+import 'package:http/http.dart' as http;
 import 'interop.dart' as js;
 
 class Monetization {
+  // Monetization DOM object
   EventTarget _monetization;
+  // Current payment pointer stored in memory
   String _paymentPointer;
   String _assetCode;
   int _assetScale;
   String _state;
   double _total;
-
-  /// Whether to log events to the console.
-  bool debug;
-
+  // Monetization events
   Stream<CustomEvent> _onPending;
   Stream<CustomEvent> _onStart;
   Stream<CustomEvent> _onStop;
   Stream<CustomEvent> _onProgress;
+  // Vanilla-related
+  String _vanillaAuth;
+  double _vanillaRate;
+  http.Client _vanillaClient;
+  bool get _vanilla => _vanillaAuth != null;
+
+  /// Returns whether the meta tag is set to receive payments.
+  bool get enabled => _getMetaTag() != null;
+
+  /// Returns whether the user supports Web Monetization.
+  bool get isMonetized => state != 'undefined';
+
+  /// Returns whether the user is streaming payments.
+  bool get isPaying {
+    if (_vanilla) {
+      // Is paying if the rate from the last payment proof is greater than 0.
+      return _vanillaRate > 0;
+    }
+
+    return state == 'started';
+  }
+
+  /// Returns the current payment pointer.
+  ///
+  /// To check if a meta tag with this pointer is set use [enabled].
+  String get pointer => _paymentPointer;
+
+  /// Returns the code identifying the asset's unit.
+  ///
+  /// For example: 'USD' or 'XRP'.
+  String get assetCode => _assetCode;
+
+  /// Returns the number of places past the decimal for the amount.
+  ///
+  /// For example, if you have USD with an [assetScale] of 2, then the minimum
+  /// divisible unit is cents.
+  int get assetScale => _assetScale;
+
+  /// Returns the monetization state provided by the browser.
+  ///
+  /// **`undefined`**:
+  /// Monetization is not supported for this user.
+  ///
+  /// **`pending`**:
+  /// Streaming has been initiated, yet first non zero packet is
+  /// "pending". It will normally transition from this `state` to `started`,
+  /// yet not always.
+  ///
+  /// **`started`**:
+  /// Streaming has received a non zero packet and is still active.
+  ///
+  /// **`stopped`**:
+  /// Streaming is inactive. This could mean a variety of things:
+  /// - May not have started yet
+  /// - May be paused (potentially will be resumed)
+  /// - Has finished completely (and awaits another request)
+  /// - The payment request was denied by user intervention
+  String get state => _state ?? 'undefined';
 
   /// Stream that tracks 'monetizationpending' events.
   ///
@@ -39,40 +98,18 @@ class Monetization {
   /// This event fires when Web Monetization has streamed a payment.
   Stream<Map> onProgress;
 
-  /// Returns the current payment pointer.
-  String get pointer => _paymentPointer;
-
-  /// Returns the code identifying the asset's unit.
-  /// For example: 'USD' or 'XRP'.
-  String get assetCode => _assetCode;
-
-  /// Returns the number of places past the decimal for the amount.
-  /// For example, if you have USD with an [assetScale] of 2, then the minimum
-  /// divisible unit is cents.
-  int get assetScale => _assetScale;
-
-  /// ## 'undefined'
-  /// Monetization is not supported for this user.
-  ///
-  /// ## 'pending'
-  /// Streaming has been initiated, yet first non zero packet is
-  /// "pending". It will normally transition from this `state` to `started`,
-  /// yet not always.
-  ///
-  /// ## 'started'
-  /// Streaming has received a non zero packet and is still active.
-  ///
-  /// ## 'stopped'
-  /// Streaming is inactive. This could mean a variety of things:
-  /// - May not have started yet
-  /// - May be paused (potentially will be resumed)
-  /// - Has finished completely (and awaits another request)
-  /// - The payment request was denied by user intervention
-  String get state => _state ?? 'undefined';
+  /// Returns whether to log events to the console.
+  bool debug;
 
   /// Initialize Web Monetization supplying a [paymentPointer].
-  Monetization(String paymentPointer, {this.debug = false}) {
+  factory Monetization(String paymentPointer, {debug = false}) {
+    return Monetization._(paymentPointer, debug);
+  }
+
+  Monetization._(String paymentPointer, this.debug, [String auth]) {
     if (js.supportsMonetization) {
+      _vanillaAuth = auth;
+      _vanillaRate = 0;
       _setPaymentPointer(paymentPointer);
       _monetization = js.monetization;
       _state = js.state;
@@ -106,14 +143,17 @@ class Monetization {
       }
     }
 
-    return Monetization(paymentPointer, debug: debug);
+    return Monetization._(paymentPointer, debug);
   }
 
-  /// Whether a user supports Web Monetization.
-  bool get isMonetized => state != 'undefined';
-
-  /// Whether a user is streaming payments.
-  bool get isPaying => state == 'started';
+  /// Initialize Web Monetization using Vanilla.
+  ///
+  /// For more information,
+  /// see <https://vanilla.so>
+  factory Monetization.vanilla(String clientId, String clientSecret, {debug = false}) {
+    final auth = base64Encode(utf8.encode('$clientId:$clientSecret'));
+    return Monetization._('\$wm.vanilla.so/pay/$clientId', debug, auth);
+  }
 
   /// Enable Web Monetization.
   void enable() {
@@ -126,7 +166,9 @@ class Monetization {
   }
 
   /// Returns the amount received by the current [pointer] on this session.
-  double getTotal({bool formatted}) {
+  ///
+  /// Pass `formatted: false` if you want the "raw" total (without accounting for the scale of the asset).
+  double getTotal({bool formatted = true}) {
     if (formatted) {
       return double.parse(
           (_total * math.pow(10, -_assetScale)).toStringAsFixed(_assetScale));
@@ -149,24 +191,24 @@ class Monetization {
   }
 
   void _addMetaTag() {
+    _total = 0;
     if (_getMetaTag() == null) {
       final metaTag = MetaElement();
       metaTag.name = 'monetization';
       metaTag.content = _paymentPointer;
       document.head.append(metaTag);
-      _total = 0;
+    } else {
+      _updateMetaTag(_paymentPointer);
     }
   }
 
-  // Not used yet.
-  /*void _updateMetaTag(String paymentPointer) {
+  void _updateMetaTag(String paymentPointer) {
     final metaTag = _getMetaTag();
 
     if (metaTag != null) {
       metaTag.setAttribute('content', paymentPointer);
-      _total = 0;
     }
-  }*/
+  }
 
   void _removeMetaTag() {
     final metaTag = _getMetaTag();
@@ -176,22 +218,63 @@ class Monetization {
     }
   }
 
-  void _monetizationPending(CustomEvent event) {
+  Future<String> _proof(String requestId) async {
+    if (_vanilla) {
+      Map<String, dynamic> proof;
+      final query = '''
+      {
+        proof(requestId: "$requestId") {
+          rate
+          total
+        }
+      }
+      ''';
+
+      final headers = {
+        'Content-type': 'application/json',
+        'Authorization': 'Basic $_vanillaAuth'
+      };
+      try {
+        final response = await _vanillaClient.post(
+            'https://wm.vanilla.so/graphql',
+            body: jsonEncode({'query': query}),
+            headers: headers);
+
+        proof = jsonDecode(response.body);
+        _vanillaRate = proof['data']['proof']['rate'];
+
+        return proof.toString();
+      } catch (e, s) {
+        if (debug) {
+          js.log('Error getting payment proof:\n$e\n$s');
+        }
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _monetizationPending(CustomEvent event) async {
     _state = js.state;
     _debug(event);
   }
 
-  void _monetizationStart(CustomEvent event) {
+  Future<void> _monetizationStart(CustomEvent event) async {
+    _vanillaClient = http.Client();
     _state = js.state;
     _debug(event);
   }
 
-  void _monetizationStop(CustomEvent event) {
+  Future<void> _monetizationStop(CustomEvent event) async {
+    _vanillaClient.close();
+    _vanillaRate = 0;
     _state = js.state;
     _debug(event);
   }
 
-  void _monetizationProgress(CustomEvent event) {
+  Future<void> _monetizationProgress(CustomEvent event) async {
+    final requestId = event.detail['requestId'];
+
     if (_total == 0) {
       _assetCode = event.detail['assetCode'];
       _assetScale = event.detail['assetScale'];
@@ -199,7 +282,7 @@ class Monetization {
 
     _total += double.parse(event.detail['amount']);
     _state = js.state;
-    _debug(event);
+    _debug(event, await _proof(requestId));
   }
 
   void _addEventHandlers() {
@@ -242,7 +325,7 @@ class Monetization {
     return map;
   }
 
-  void _debug(CustomEvent event) {
+  void _debug(CustomEvent event, [String proof]) {
     if (debug) {
       final map = _mapify(event);
 
@@ -252,9 +335,12 @@ class Monetization {
         js.log('%c${map.toString()}', 'color: yellow');
       } else if (map['type'] == 'monetizationstart') {
         js.log('%c${map.toString()}', 'color: lime');
-      } else {
-        // monetizationstop
+      } else { // monetizationstop
         js.log('%c${map.toString()}', 'color: red');
+      }
+
+      if (proof != null) {
+        js.log(proof);
       }
     }
   }
