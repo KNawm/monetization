@@ -150,7 +150,8 @@ class Monetization {
   ///
   /// For more information,
   /// see <https://vanilla.so>
-  factory Monetization.vanilla(String clientId, String clientSecret, {debug = false}) {
+  factory Monetization.vanilla(String clientId, String clientSecret,
+      {debug = false}) {
     final auth = base64Encode(utf8.encode('$clientId:$clientSecret'));
     return Monetization._('\$wm.vanilla.so/pay/$clientId', debug, auth);
   }
@@ -335,7 +336,7 @@ class Monetization {
         js.log('%c${map.toString()}', 'color: yellow');
       } else if (map['type'] == 'monetizationstart') {
         js.log('%c${map.toString()}', 'color: lime');
-      } else { // monetizationstop
+      } else {
         js.log('%c${map.toString()}', 'color: red');
       }
 
