@@ -22,6 +22,7 @@ class Monetization {
   // Vanilla-related
   String _vanillaAuth;
   double _vanillaRate;
+  double _vanillaTotal;
   http.Client _vanillaClient;
   bool get _vanilla => _vanillaAuth != null;
 
@@ -168,6 +169,8 @@ class Monetization {
 
   /// Returns the amount received by the current [pointer] on this session.
   ///
+  /// Keep in mind that this number resets every time that `onStart` fires.
+  ///
   /// Pass `formatted: false` if you want the "raw" total (without accounting for the scale of the asset).
   double getTotal({bool formatted = true}) {
     if (formatted) {
@@ -177,6 +180,20 @@ class Monetization {
 
     return _total;
   }
+
+  /// Returns the current payment rate per second from Vanilla's proof of
+  /// payment on "raw" format (disregarding the asset scale).
+  double getVanillaRate() => _vanillaRate;
+
+  /// Returns the total amount received from Vanilla's proof of payment in "raw"
+  /// format (disregarding the asset scale).
+  ///
+  /// This total SHOULD be the same that you get from `getTotal(formatted: false)`
+  /// but sometimes there will be a small discrepancy.
+  ///
+  /// Keep in mind this total is only from the last requestId and will reset
+  /// if the requestId changes.
+  double getVanillaTotal() => _vanillaTotal;
 
   void _setPaymentPointer(String paymentPointer) {
     if (paymentPointer.startsWith('\$')) {
@@ -192,7 +209,6 @@ class Monetization {
   }
 
   void _addMetaTag() {
-    _total = 0;
     if (_getMetaTag() == null) {
       final metaTag = MetaElement();
       metaTag.name = 'monetization';
@@ -243,6 +259,7 @@ class Monetization {
 
         proof = jsonDecode(response.body);
         _vanillaRate = proof['data']['proof']['rate'];
+        _vanillaTotal = proof['data']['proof']['total'];
 
         return proof.toString();
       } catch (e, s) {
@@ -261,6 +278,7 @@ class Monetization {
   }
 
   Future<void> _monetizationStart(CustomEvent event) async {
+    _total = 0;
     _vanillaClient = http.Client();
     _state = js.state;
     _debug(event);
@@ -343,6 +361,9 @@ class Monetization {
       if (proof != null) {
         js.log(proof);
       }
+      js.log(getVanillaRate());
+      js.log(getVanillaTotal());
+      js.log(_total);
     }
   }
 }
