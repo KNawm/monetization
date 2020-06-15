@@ -53,19 +53,39 @@ monetization.onStop.listen((event) {
 });
 ```
 
-
-You could also write custom logic to check if a user is paying without subscribing to the streams:
+You can also check if a user is paying without subscribing to the streams:
 
 ```dart
-Future<void> checkIfPaying() async {
-  if (monetization.isMonetized) {
-    // Prefer custom logic over this
-    await Future.delayed(Duration(seconds: 3));
-    if (monetization.isPaying) {
-      // Do something...
-    }
-  } // Doesn't support monetization
+Future<bool> isPaying() async {
+  // Prefer custom logic over this
+  await Future.delayed(const Duration(seconds: 3));
+  return monetization.isPaying;
 }
+```
+
+### Get information about the monetization
+
+```dart
+monetization.isMonetized; // Returns if the user supports monetization
+monetization.isPaying;    // Returns if the user is streaming payments
+monetization.pointer;     // Returns the current payment pointer
+```
+
+### Get the revenue from the current session
+
+```dart
+monetization.getTotal(formatted: false); // 884389
+monetization.getTotal(); // 0.000884389
+monetization.assetCode;  // 'XRP'
+monetization.assetScale; // 9
+```
+
+### Enable/disable the monetization dynamically 
+
+```dart
+monetization.enabled;   // true
+monetization.disable(); // Stops the monetization
+monetization.enable();  // Start the monetization again with the same pointer
 ```
 
 ### Probabilistic revenue sharing
@@ -91,21 +111,30 @@ choosing the third one.
 For more information on probabilistic revenue sharing, read [this article](https://coil.com/p/sharafian/Probabilistic-Revenue-Sharing/8aQDSPsw)
 by Ben Sharafian.
 
-### Dinamically enable/disable monetization
+### Verifying payments (using [Vanilla](https://vanilla.so))
+
+Monetization events can be manipulated, so you can't know for sure if a user is really paying. You can add an extra layer of security to your monetized content using Vanilla. To learn how does Vanilla works read
+[this article](https://dev.to/cinnamonvideo/vanilla-by-cinnamon-497).
+
+You will need your API credentials, you can get them [here](https://admin.vanilla.so).
 
 ```dart
-var monetization = Monetization('\$pay.tomasarias.me'); // Monetization enabled on initialization
-monetization.disable(); // Stops the monetization
-monetization.enable();  // Start the monetization again with the same pointer
+// Vanilla API Credentials
+final clientId = 'Your Client ID';
+final clientSecret = 'Your Client Secret';
+
+var monetization = Monetization.vanilla(clientId, clientSecret);
 ```
 
-### Get the revenue from the current session
+Now you can check if the payment stream is valid in different ways:
 
 ```dart
-monetization.getTotal(); // 884389
-monetization.getTotal(formatted: true); // 0.000884389
-monetization.assetCode;  // 'XRP'
-monetization.assetScale; // 9
+// With Vanilla, this will return true if the user is paying and Vanilla generates a proof of payment.
+monetization.isPaying;
+// With Vanilla, this will return the current payment rate per second, if the monetization is stopped this will be 0.
+monetization.getVanillaRate()
+// With Vanilla, this will return the total amount received from the current requestId.
+monetization.getVanillaTotal();
 ```
 
 ## Features and bugs
