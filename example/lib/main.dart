@@ -28,11 +28,15 @@ class _MyHomePageState extends State<MyHomePage> {
   Monetization monetization;
   double total;
 
+  // Vanilla API Credentials
+  final clientId = const String.fromEnvironment('CLIENT_ID');
+  final clientSecret = const String.fromEnvironment('CLIENT_SECRET');
+
   @override
   void initState() {
     super.initState();
     setState(() {
-      monetization = Monetization('\$pay.tomasarias.me', debug: true);
+      monetization = Monetization.vanilla(clientId, clientSecret, debug: true);
     });
   }
 
@@ -67,7 +71,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   }
 
                   return Text(
-                    '${monetization.getTotal(formatted: true)} ${monetization.assetCode}',
+                    '${monetization.getTotal()} ${monetization.assetCode}',
                     style: Theme.of(context).textTheme.headline4,
                   );
                 }),
