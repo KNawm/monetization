@@ -3,7 +3,7 @@
 - Added support for [Vanilla](https://vanilla.so)
 - Added `enabled` getter that returns if the meta tag is present
 - `getTotal()` now returns the formatted amount by default
-- Revamped example
+- Example now uses Vanilla
 - Improved docs
 
 ## 1.0.1
