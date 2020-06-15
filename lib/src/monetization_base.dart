@@ -361,9 +361,6 @@ class Monetization {
       if (proof != null) {
         js.log(proof);
       }
-      js.log(getVanillaRate());
-      js.log(getVanillaTotal());
-      js.log(_total);
     }
   }
 }
