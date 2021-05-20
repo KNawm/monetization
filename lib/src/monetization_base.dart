@@ -24,6 +24,7 @@ class Monetization {
   double _vanillaRate;
   double _vanillaTotal;
   http.Client _vanillaClient;
+  http.Client _receiptVerifier;
   bool get _vanilla => _vanillaAuth != null;
 
   /// Returns whether the meta tag is set to receive payments.
@@ -102,12 +103,15 @@ class Monetization {
   /// Returns whether to log events to the console.
   bool debug;
 
+  /// Returns whether the receipt verifier service is enabled.
+  bool receipts;
+
   /// Initialize Web Monetization supplying a [paymentPointer].
-  factory Monetization(String paymentPointer, {debug = false}) {
-    return Monetization._(paymentPointer, debug);
+  factory Monetization(String paymentPointer, {receipts = true}, {debug = false}) {
+    return Monetization._(paymentPointer, receipts, debug);
   }
 
-  Monetization._(String paymentPointer, this.debug, [String auth]) {
+  Monetization._(String paymentPointer, this.receipts, this.debug, [String auth]) {
     if (js.supportsMonetization) {
       _vanillaAuth = auth;
       _vanillaRate = 0;
@@ -124,37 +128,41 @@ class Monetization {
   ///
   /// For example:
   /// ```
-  /// var pointers = { 'pay.tomasarias.me/usd': 0.5,
-  ///                  'pay.tomasarias.me/xrp': 0.2,
-  ///                  'pay.tomasarias.me/ars': 0.3 };
+  /// var pointers = { r'$pay.tomasarias.me/usd': 0.5,
+  ///                  r'$pay.tomasarias.me/xrp': 0.2,
+  ///                  r'$pay.tomasarias.me/ars': 0.3 };
   /// ```
   ///
   /// For more information,
   /// see <https://coil.com/p/sharafian/Probabilistic-Revenue-Sharing/8aQDSPsw>
   factory Monetization.probabilistic(Map<String, double> paymentPointers,
-      {debug = false}) {
-    final sum = paymentPointers.values.reduce((sum, weight) => sum + weight);
-    var choice = math.Random().nextDouble() * sum;
-    String paymentPointer;
+      {receipts = true}, {debug = false}) {
+    var shares = [];
 
-    for (final pointer in paymentPointers.keys) {
-      final weight = paymentPointers[pointer];
-      if ((choice -= weight) <= 0) {
-        paymentPointer = pointer;
+    for (MapEntry e in paymentPointers.entries) {
+      final pointer = e.key;
+      final weight = e.value;
+
+      if (_validatePaymentPointer(pointer)) {
+        shares.add([pointer, weight, ""]);
+      } else {
+        throw ArgumentError.value(paymentPointers, 'paymentPointers', 'The pointer: $pointer is not a valid payment pointer.');
       }
     }
 
-    return Monetization._(paymentPointer, debug);
+    final base64Url = base64UrlEncode(utf8.encode(jsonEncode(shares)))
+
+    return Monetization._('\$webmonetization.org/api/revshare/pay/$base64Url', debug);
   }
 
   /// Initialize Web Monetization using Vanilla.
   ///
   /// For more information,
   /// see <https://vanilla.so>
-  factory Monetization.vanilla(String clientId, String clientSecret,
-      {debug = false}) {
+  factory Monetization.vanilla(String clientId, String clientSecret, {receipts = false}, {debug = false}) {
     final auth = base64Encode(utf8.encode('$clientId:$clientSecret'));
-    return Monetization._('\$wm.vanilla.so/pay/$clientId', debug, auth);
+
+    return Monetization._('\$wm.vanilla.so/pay/$clientId', false, receipts, auth);
   }
 
   /// Enable Web Monetization.
@@ -195,12 +203,19 @@ class Monetization {
   /// if the requestId changes.
   double getVanillaTotal() => _vanillaTotal;
 
+  bool _validatePaymentPointer(string paymentPointer) => Uri.tryParse()?.isAbsolute ?? false;
+
   void _setPaymentPointer(String paymentPointer) {
-    if (paymentPointer.startsWith('\$')) {
-      _paymentPointer = paymentPointer;
+    if (paymentPointer.startsWith('\$') || paymentPointer.startsWith('https://')) {
+      if (receipts) {
+        final pointer = Uri.encodeComponent(paymentPointer);
+        _paymentPointer = '\$webmonetization.org/api/receipts/$pointer';
+      } else {
+        _paymentPointer = paymentPointer;
+      }
     } else {
       throw ArgumentError.value(paymentPointer, 'paymentPointer',
-          'The payment pointer must start with "\$"');
+          'The payment pointer must start with "\$" or "https://"');
     }
   }
 
@@ -235,7 +250,7 @@ class Monetization {
     }
   }
 
-  Future<String> _proof(String requestId) async {
+  Future<String> _proof(String requestId, {receipt = null}) async {
     if (_vanilla) {
       Map<String, dynamic> proof;
       final query = '''
@@ -267,6 +282,25 @@ class Monetization {
           js.log('Error getting payment proof:\n$e\n$s');
         }
       }
+    } else if (receipts && receipt != null) {
+      final headers = {
+        'Content-type': 'application/json'
+      };
+
+      try {
+        final response = await _receiptVerifier.post(
+            'https://webmonetization.org/api/receipts/verify',
+            body: jsonEncode(receipt),
+            headers: headers);
+
+        proof = jsonDecode(response.body);
+
+        return proof.toString();
+      } catch (e, s) {
+        if (debug) {
+          js.log('Error getting payment proof:\n$e\n$s');
+        }
+      }
     }
 
     return null;
@@ -278,6 +312,7 @@ class Monetization {
   }
 
   Future<void> _monetizationStart(CustomEvent event) async {
+    _receiptVerifier = http.Client();
     _total = 0;
     _vanillaClient = http.Client();
     _state = js.state;
@@ -293,6 +328,7 @@ class Monetization {
 
   Future<void> _monetizationProgress(CustomEvent event) async {
     final requestId = event.detail['requestId'];
+    final receipt = event.detail['receipt'];
 
     if (_total == 0) {
       _assetCode = event.detail['assetCode'];
@@ -301,7 +337,7 @@ class Monetization {
 
     _total += double.parse(event.detail['amount']);
     _state = js.state;
-    _debug(event, await _proof(requestId));
+    _debug(event, await _proof(requestId, receipt));
   }
 
   void _addEventHandlers() {

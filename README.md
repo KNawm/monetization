@@ -93,20 +93,19 @@ monetization.enable();  // Start the monetization again with the same pointer
 Sometimes you want to share revenue across different people, to do this pass a `Map` with the payment pointers and
 weights to the `Monetization.probabilistic` constructor.
 
-This will choose one of the pointers for the entire session.
+This will use WebMonetization.org's API for sharing the revenue across payment pointers.
 
 ```dart
 final pointers = {
-  'pay.tomasarias.me/usd': 0.5,
-  'pay.tomasarias.me/xrp': 0.2,
-  'pay.tomasarias.me/ars': 0.3
+  '\$pay.tomasarias.me/usd': 0.5,
+  '\$pay.tomasarias.me/xrp': 0.2,
+  '\$pay.tomasarias.me/ars': 0.3
 };
 
 var monetization = Monetization.probabilistic(pointers);
 ```
 
-This will result on a 50% chance of choosing the first pointer, 20% chance of choosing the second and 30% chance of
-choosing the third one.
+This will result on 50% of the revenue going to the first pointer, 20% of the revenue going to the second pointer and 30% of the revenue going to the third one.
 
 For more information on probabilistic revenue sharing, read [this article](https://coil.com/p/sharafian/Probabilistic-Revenue-Sharing/8aQDSPsw)
 by Ben Sharafian.
